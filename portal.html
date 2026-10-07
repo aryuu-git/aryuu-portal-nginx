@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>aryuu.icu</title>
+  <!--
+    部署为 nginx 静态页（/portal/ 路径），无构建步骤、无外部依赖。
+    视觉对齐 karuta「和风歌牌」设计系统：墨紫底 × 樱花粉 × 金粉、思源宋体、描金语言
+    （token 取值见 others/karuta/docs/design-system.md）。
+    页面为沉浸式场景入口：和纸纹理 / 霞云 / 远山 / 鸟居 / 青海波 / 垂樱 / 樱瓣 / 金尘
+    / 漂浮汉字，全部纯手绘 SVG + CSS/JS 动画，prefers-reduced-motion 直出终态。
+    同域相对路径直接可用；上线时仅需把 anitexas 的 href 换成其真实域名。
+  -->
+  <style>
+    /* ============================================================
+       1. 设计 token（karuta RGB 三元组体系）
+       ============================================================ */
+    :root {
+      --ink: 51 22 42;            /* 主背景 #33162A */
+      --ink-deep: 38 15 31;       /* 深背景 #260F1F */
+      --gold: 248 176 200;        /* 主强调·樱花粉 #f8b0c8 */
+      --gold-light: 253 216 232;  /* 亮阶 #fdd8e8 */
+      --gold-foil: 212 167 106;   /* 金粉 #d4a76a */
+      --surface: 95 48 73;        /* 面板底 #5F3049 */
+      --border: 160 92 128;       /* 描边 #A05C80 */
+      --muted: 232 192 212;       /* 次级文字 #e8c0d4 */
+      --body-text: 254 248 250;
+
+      /* 场景层专用 */
+      --sky-top: 38 15 31;        /* 天幕上缘（ink-deep） */
+      --sky-mid: 51 22 42;        /* 天幕中段（ink） */
+      --sky-low: 74 32 58;        /* 天幕近地霞光 */
+      --moon: 253 216 232;        /* 月晕 */
+    }
+
+    /* ============================================================
+       2. 基座与入场编排
+       ============================================================ */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { height: 100%; }
+
+    body {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      overflow: hidden;
+      padding: 32px 24px;
+      color: rgb(var(--body-text));
+      font-family: system-ui, sans-serif;
+      background:
+        radial-gradient(120% 90% at 50% -10%, rgb(var(--sky-low) / 0.9) 0%, transparent 55%),
+        linear-gradient(180deg, rgb(var(--sky-top)) 0%, rgb(var(--sky-mid)) 52%, rgb(var(--ink-deep)) 100%);
+    }
+
+    /* 入场：fadeUp（对齐 karuta FadeIn，0.4s ease-entrance），逐层错开 */
+    .fade-up {
+      opacity: 0;
+      animation: fadeUp 0.6s cubic-bezier(.34, 1.56, .64, 1) forwards;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 描金饰线绘制入场（stroke-dashoffset 画线） */
+    .draw-in {
+      stroke-dasharray: 200;
+      stroke-dashoffset: 200;
+      animation: drawIn 1.2s ease-out forwards;
+    }
+    @keyframes drawIn {
+      to { stroke-dashoffset: 0; }
+    }
+
+    /* ============================================================
+       3. 场景层总闸（全部不吃指针事件，叠在内容之下）
+       ============================================================ */
+    .scene {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .scene > * { position: absolute; }
+
+    /* 和纸颗粒纹理（feTurbulence 数据源，压到 4% 不抢内容） */
+    .scene-grain {
+      inset: 0;
+      opacity: 0.045;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* 夜色晕影（四周压角，视线收向中心品牌区） */
+    .scene-vignette {
+      inset: 0;
+      background: radial-gradient(115% 85% at 50% 42%, transparent 55%, rgb(var(--ink-deep) / 0.85) 100%);
+    }
+
+    /* 月晕：品牌后方的大光斑（karuta BrandGlow 语言，只动 opacity） */
+    .scene-moon {
+      top: 4%;
+      left: 50%;
+      width: 520px;
+      height: 520px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgb(var(--moon) / 0.22) 0%, rgb(var(--gold-foil) / 0.08) 45%, transparent 70%);
+      animation: moonBreath 9s ease-in-out infinite;
+    }
+    @keyframes moonBreath {
+      0%, 100% { opacity: 0.75; transform: translateX(-50%) scale(1); }
+      50%      { opacity: 1;    transform: translateX(-50%) scale(1.05); }
+    }
+
+    /* 两侧暖金光斑（左樱粉右金粉，错相呼吸） */
+    .scene-glow {
+      width: 380px;
+      height: 380px;
+      border-radius: 50%;
+      filter: blur(2px);
+    }
+    .scene-glow--left {
+      left: -120px; top: 18%;
+      background: radial-gradient(circle, rgb(var(--gold) / 0.12) 0%, transparent 68%);
+      animation: glowDrift 11s ease-in-out infinite;
+    }
+    .scene-glow--right {
+      right: -120px; bottom: 12%;
+      background: radial-gradient(circle, rgb(var(--gold-foil) / 0.12) 0%, transparent 68%);
+      animation: glowDrift 13s ease-in-out infinite reverse;
+    }
+    @keyframes glowDrift {
+      0%, 100% { transform: translateY(0); opacity: 0.8; }
+      50%      { transform: translateY(26px); opacity: 1; }
+    }
+
+    /* ============================================================
+       4. 天象层：霞云 / 远山 / 鸟居 / 青海波
+       ============================================================ */
+
+    /* 霞云三条，横向缓移、不同速（视差感） */
+    .scene-clouds {
+      left: 0; right: 0;
+      height: 260px;
+    }
+    .scene-clouds svg { width: 100%; height: 100%; }
+    .cloud-band { transform-origin: center; }
+    .cloud-band--1 { animation: cloudSlide 68s linear infinite; }
+    .cloud-band--2 { animation: cloudSlide 92s linear infinite reverse; opacity: 0.8; }
+    .cloud-band--3 { animation: cloudSlide 120s linear infinite; opacity: 0.55; }
+    @keyframes cloudSlide {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-160px); }
+    }
+
+    /* 远山双层剪影（前深后浅拉开纵深） */
+    .scene-mountains {
+      left: 0; right: 0; bottom: 96px;
+      height: 300px;
+    }
+    .scene-mountains svg { width: 100%; height: 100%; }
+
+    /* 鸟居剪影：底部中央低对比地标，沉在山影里 */
+    .scene-torii {
+      left: 50%; bottom: 118px;
+      width: 300px; height: 190px;
+      transform: translateX(-50%);
+      opacity: 0.5;
+    }
+    .scene-torii svg { width: 100%; height: 100%; }
+
+    /* 青海波纹带：贴地，横向滚动营造水流感 */
+    .scene-waves {
+      left: -120px; right: -120px; bottom: 0;
+      height: 120px;
+      opacity: 0.55;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48'%3E%3Cg fill='none' stroke='%23d4a76a' stroke-opacity='0.28' stroke-width='1.2'%3E%3Ccircle cx='0' cy='48' r='18'/%3E%3Ccircle cx='0' cy='48' r='12'/%3E%3Ccircle cx='0' cy='48' r='6'/%3E%3Ccircle cx='48' cy='48' r='18'/%3E%3Ccircle cx='48' cy='48' r='12'/%3E%3Ccircle cx='48' cy='48' r='6'/%3E%3Ccircle cx='96' cy='48' r='18'/%3E%3Ccircle cx='96' cy='48' r='12'/%3E%3Ccircle cx='96' cy='48' r='6'/%3E%3Ccircle cx='24' cy='24' r='18'/%3E%3Ccircle cx='24' cy='24' r='12'/%3E%3Ccircle cx='24' cy='24' r='6'/%3E%3Ccircle cx='72' cy='24' r='18'/%3E%3Ccircle cx='72' cy='24' r='12'/%3E%3Ccircle cx='72' cy='24' r='6'/%3E%3C/g%3E%3C/svg%3E");
+      background-repeat: repeat-x;
+      background-size: 96px 48px;
+      animation: waveScroll 26s linear infinite;
+    }
+    @keyframes waveScroll {
+      from { background-position-x: 0; }
+      to   { background-position-x: -192px; }
+    }
+
+    /* 垂樱枝：左上角手绘枝条 + 花簇，缓慢摇曳 */
+    .scene-branch {
+      left: -30px; top: -20px;
+      width: 420px; height: 380px;
+      opacity: 0.9;
+      transform-origin: 8% 0;
+      animation: branchSway 8.5s ease-in-out infinite;
+    }
+    .scene-branch svg { width: 100%; height: 100%; }
+    @keyframes branchSway {
+      0%, 100% { transform: rotate(-0.8deg); }
+      50%      { transform: rotate(1deg); }
+    }
+
+    /* 漂浮汉字水印：巨型宋体「歌」「牌」低透明缓移，压在最底 */
+    .scene-kanji {
+      font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+      font-size: 340px;
+      font-weight: 700;
+      line-height: 1;
+      color: rgb(var(--gold-light) / 0.035);
+      user-select: none;
+    }
+    .scene-kanji--ge {
+      left: 4%; top: 46%;
+      animation: kanjiDrift 22s ease-in-out infinite;
+    }
+    .scene-kanji--pai {
+      right: 2%; top: 20%;
+      font-size: 260px;
+      animation: kanjiDrift 28s ease-in-out infinite reverse;
+    }
+    @keyframes kanjiDrift {
+      0%, 100% { transform: translateY(0) rotate(-3deg); }
+      50%      { transform: translateY(-34px) rotate(-1deg); }
+    }
+
+    /* ============================================================
+       5. 粒子层：飘落樱瓣 / 上升金尘
+       ============================================================ */
+
+    /* 樱瓣单体（JS 注入随机参数；三种飘落节奏错开，不齐步） */
+    .petal {
+      position: absolute;
+      top: -6vh;
+      width: 14px; height: 12px;
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+    .petal svg { width: 100%; height: 100%; overflow: visible; }
+    .petal--fall-a { animation: petalFallA 14s linear infinite; }
+    .petal--fall-b { animation: petalFallB 19s linear infinite; }
+    .petal--fall-c { animation: petalFallC 24s linear infinite; }
+    @keyframes petalFallA {
+      0%   { opacity: 0; transform: translate3d(0, -6vh, 0) rotate(0deg); }
+      8%   { opacity: 0.85; }
+      50%  { transform: translate3d(46px, 52vh, 0) rotate(190deg); }
+      92%  { opacity: 0.55; }
+      100% { opacity: 0; transform: translate3d(-24px, 112vh, 0) rotate(420deg); }
+    }
+    @keyframes petalFallB {
+      0%   { opacity: 0; transform: translate3d(0, -6vh, 0) rotate(30deg); }
+      10%  { opacity: 0.7; }
+      50%  { transform: translate3d(-58px, 50vh, 0) rotate(-150deg); }
+      90%  { opacity: 0.5; }
+      100% { opacity: 0; transform: translate3d(30px, 112vh, 0) rotate(-360deg); }
+    }
+    @keyframes petalFallC {
+      0%   { opacity: 0; transform: translate3d(0, -6vh, 0) rotate(-20deg); }
+      12%  { opacity: 0.6; }
+      50%  { transform: translate3d(70px, 54vh, 0) rotate(240deg); }
+      88%  { opacity: 0.45; }
+      100% { opacity: 0; transform: translate3d(10px, 112vh, 0) rotate(520deg); }
+    }
+
+    /* 金尘单体（JS 注入；自下而上缓升微摆，金粉品牌语言） */
+    .mote {
+      position: absolute;
+      bottom: -24px;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: rgb(var(--gold-foil) / 0.85);
+      box-shadow: 0 0 8px rgb(var(--gold-foil) / 0.55);
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+    @keyframes moteRise {
+      0%   { opacity: 0; transform: translate3d(0, 0, 0) scale(0.6); }
+      12%  { opacity: 0.9; }
+      60%  { opacity: 0.75; }
+      100% { opacity: 0; transform: translate3d(var(--mote-sway, 20px), -104vh, 0) scale(1); }
+    }
+
+    /* ============================================================
+       6. 品牌标头（wordmark + 花菱饰件 + 描金分割线）
+       ============================================================ */
+    .brand {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      animation-delay: 0.05s;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+    }
+
+    /* 花菱饰件（左右对称，画线入场 + 极缓呼吸） */
+    .brand-orn {
+      width: 44px; height: 44px;
+      color: rgb(var(--gold-foil) / 0.8);
+      animation: ornBreath 6s ease-in-out infinite;
+    }
+    .brand-orn--right { animation-delay: -3s; }
+    .brand-orn svg { width: 100%; height: 100%; overflow: visible; }
+    @keyframes ornBreath {
+      0%, 100% { opacity: 0.65; transform: rotate(0deg); }
+      50%      { opacity: 1;    transform: rotate(6deg); }
+    }
+
+    /* wordmark：金粉渐变文字 + 流光扫过 + 光晕呼吸 */
+    .brand-title {
+      position: relative;
+      font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+      font-size: 56px;
+      line-height: 1.15;
+      font-weight: 700;
+      letter-spacing: 6px;
+      background: linear-gradient(105deg,
+        rgb(var(--gold-light)) 0%,
+        rgb(var(--gold)) 38%,
+        rgb(var(--gold-foil)) 62%,
+        rgb(var(--gold-light)) 100%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 26px rgb(var(--gold-foil) / 0.35));
+      animation:
+        titleShimmer 7.5s ease-in-out infinite,
+        titleBreath 9s ease-in-out infinite;
+    }
+    @keyframes titleShimmer {
+      0%, 100% { background-position: 0% 0; }
+      50%      { background-position: 100% 0; }
+    }
+    @keyframes titleBreath {
+      0%, 100% { filter: drop-shadow(0 0 22px rgb(var(--gold-foil) / 0.28)); }
+      50%      { filter: drop-shadow(0 0 38px rgb(var(--gold-foil) / 0.5)); }
+    }
+
+    /* 描金分割线：细线 + 菱形节点 + 两端收笔（画线入场） */
+    .brand-rule {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: min(420px, 72vw);
+    }
+    .brand-rule .rule-line {
+      flex: 1;
+      height: 2px;
+      border-radius: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgb(var(--gold-foil) / 0.55) 30%, rgb(var(--gold) / 0.55) 70%, transparent 100%);
+      transform-origin: left center;
+      animation: ruleWipe 1s ease-out 0.35s backwards;
+    }
+    .brand-rule .rule-line--right { transform-origin: right center; }
+    @keyframes ruleWipe {
+      from { transform: scaleX(0); opacity: 0; }
+      to   { transform: scaleX(1); opacity: 1; }
+    }
+    .brand-rule .rule-node {
+      width: 8px; height: 8px;
+      transform: rotate(45deg);
+      border: 1px solid rgb(var(--gold-foil) / 0.85);
+      background: rgb(var(--gold-foil) / 0.35);
+      box-shadow: 0 0 10px rgb(var(--gold-foil) / 0.5);
+    }
+
+    /* ============================================================
+       7. 入口卡（整卡即入口：角饰 / 水印牌面 / 光泽 / 倾斜 / 涟漪）
+       ============================================================ */
+    .cards {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    a.card {
+      --tilt-x: 0deg;
+      --tilt-y: 0deg;
+      --sheen-x: -60%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 320px;
+      padding: 30px 28px 26px;
+      border-radius: 14px;
+      border: 1px solid rgb(var(--border) / 0.5);
+      background: linear-gradient(168deg, rgb(var(--surface)) 0%, rgb(var(--ink-deep)) 82%);
+      box-shadow: 0 4px 16px rgb(0 0 0 / 0.3);
+      text-decoration: none;
+      color: rgb(var(--body-text));
+      overflow: hidden;
+      transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    /* 描金顶线：transparent → 金粉 → 樱花粉 */
+    a.card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 14px; right: 14px; height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgb(var(--gold-foil) / 0.45) 50%, rgb(var(--gold) / 0.45) 100%, transparent 100%);
+    }
+
+    /* 水印牌面：巨型字符沉在卡底，hover 轻旋 */
+    .card .card-watermark {
+      position: absolute;
+      right: -12px; bottom: -34px;
+      font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+      font-size: 150px;
+      line-height: 1;
+      color: rgb(var(--gold-light) / 0.05);
+      user-select: none;
+      transition: transform 320ms ease, color 320ms ease;
+    }
+    a.card:hover .card-watermark {
+      transform: rotate(-6deg) scale(1.06);
+      color: rgb(var(--gold-light) / 0.09);
+    }
+
+    /* 卡片四角饰（描金折角，呼应 karuta 牌面角花） */
+    .card .corner {
+      position: absolute;
+      width: 18px; height: 18px;
+      border-color: rgb(var(--gold-foil) / 0.55);
+      border-style: solid;
+      transition: width 180ms ease, height 180ms ease, border-color 180ms ease;
+    }
+    .card .corner--tl { top: 10px; left: 10px; border-width: 1px 0 0 1px; border-radius: 6px 0 0 0; }
+    .card .corner--br { bottom: 10px; right: 10px; border-width: 0 1px 1px 0; border-radius: 0 0 6px 0; }
+    a.card:hover .corner {
+      width: 26px; height: 26px;
+      border-color: rgb(var(--gold-foil) / 0.9);
+    }
+
+    /* 光泽扫过：hover 时对角高光斜掠（单一光效，不与 glow 同时叠加在伪元素上） */
+    .card .sheen {
+      position: absolute;
+      inset: -40%;
+      background: linear-gradient(115deg,
+        transparent 38%,
+        rgb(var(--gold-light) / 0.12) 48%,
+        rgb(var(--gold-foil) / 0.16) 52%,
+        transparent 62%);
+      transform: translateX(var(--sheen-x));
+      transition: transform 620ms cubic-bezier(.22, .61, .36, 1);
+      pointer-events: none;
+    }
+    a.card:hover .sheen { transform: translateX(60%); }
+
+    /* 图标框：金粉描边 + 光晕（缩小档 36px 框 / 18px 线稿） */
+    .card .icon {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 9px;
+      border: 1px solid rgb(var(--gold-foil) / 0.45);
+      background: rgb(var(--gold-foil) / 0.12);
+      box-shadow: 0 0 10px rgb(var(--gold-foil) / 0.4);
+      color: rgb(var(--gold-light));
+      transition: box-shadow 180ms ease;
+    }
+    a.card:hover .icon { box-shadow: 0 0 16px rgb(var(--gold-foil) / 0.65); }
+    .card .icon svg {
+      width: 18px; height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .card h2 {
+      font-family: "Noto Serif SC", "Source Han Serif SC", serif;
+      font-size: 20px;
+      line-height: 28px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      color: rgb(var(--gold-light));
+    }
+    .card p {
+      font-size: 13px;
+      line-height: 20px;
+      color: rgb(var(--muted));
+    }
+
+    /* 可点暗示：右下角极简箭头角标（非按钮文本，hover 时前移） */
+    .card .chevron {
+      position: absolute;
+      right: 18px; bottom: 14px;
+      font-family: "Noto Serif SC", serif;
+      font-size: 15px;
+      color: rgb(var(--gold) / 0.6);
+      transition: transform 180ms ease, color 180ms ease;
+    }
+    a.card:hover .chevron {
+      transform: translateX(4px);
+      color: rgb(var(--gold-light));
+    }
+
+    /* hover 总态：抬升 + 描边亮 + 光晕（lift + glow 合并为一次过渡） */
+    a.card:hover {
+      border-color: rgb(var(--gold) / 0.45);
+      box-shadow: 0 14px 32px rgb(0 0 0 / 0.38), 0 0 22px rgb(var(--gold) / 0.38);
+    }
+    a.card:focus-visible {
+      outline: none;
+      border-color: rgb(var(--gold) / 0.6);
+      box-shadow: 0 0 0 2px rgb(var(--gold) / 0.6), 0 14px 32px rgb(0 0 0 / 0.38);
+    }
+
+    /* 点击涟漪：JS 注入 span.ripple，径向淡出 */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgb(var(--gold-light) / 0.35) 0%, transparent 70%);
+      transform: translate(-50%, -50%) scale(0);
+      animation: rippleOut 520ms ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes rippleOut {
+      to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    }
+
+    /* ============================================================
+       8. 视口适配 / 无障碍
+       ============================================================ */
+    @media (max-width: 680px) {
+      body { gap: 36px; padding: 24px 16px; }
+      .brand-title { font-size: 38px; letter-spacing: 3px; }
+      .brand-orn { width: 32px; height: 32px; }
+      .brand-row { gap: 12px; }
+      .cards { flex-direction: column; align-items: center; gap: 20px; }
+      a.card { width: 100%; max-width: 340px; }
+      .scene-branch { width: 280px; height: 250px; }
+      .scene-kanji { font-size: 180px; }
+      .scene-kanji--pai { font-size: 150px; }
+      .scene-torii { width: 220px; height: 140px; }
+    }
+
+    /* 低动态偏好：全部动画直出终态，粒子层隐藏 */
+    @media (prefers-reduced-motion: reduce) {
+      .fade-up,
+      .draw-in,
+      .brand-orn,
+      .brand-title,
+      .brand-rule .rule-line,
+      .scene-moon,
+      .scene-glow,
+      .scene-clouds .cloud-band,
+      .scene-waves,
+      .scene-branch,
+      .scene-kanji,
+      .petal,
+      .mote {
+        animation: none !important;
+      }
+      .fade-up { opacity: 1; }
+      .draw-in { stroke-dashoffset: 0; }
+      .brand-title { filter: drop-shadow(0 0 26px rgb(var(--gold-foil) / 0.35)); }
+      .petal, .mote { display: none; }
+      a.card { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ===== 场景层（全部 fixed / 不吃指针） ===== -->
+  <div class="scene" aria-hidden="true">
+    <div class="scene-kanji scene-kanji--ge">歌</div>
+    <div class="scene-kanji scene-kanji--pai">牌</div>
+
+    <!-- 霞云三条：长条云带，低对比暖色 -->
+    <div class="scene-clouds">
+      <svg viewBox="0 0 1440 260" preserveAspectRatio="none">
+        <g class="cloud-band cloud-band--1" fill="rgb(253 216 232 / 0.05)">
+          <path d="M-80 78 Q 20 44 110 66 Q 170 34 260 60 Q 330 30 430 58 Q 520 36 610 62 Q 700 40 800 64 Q 900 42 1010 66 Q 1110 44 1210 68 Q 1310 48 1420 72 L 1560 72 L 1560 130 L -80 130 Z" />
+        </g>
+        <g class="cloud-band cloud-band--2" fill="rgb(212 167 106 / 0.045)">
+          <path d="M-120 132 Q -20 104 90 126 Q 180 98 290 122 Q 390 96 500 120 Q 610 98 720 124 Q 830 102 950 126 Q 1060 104 1180 128 Q 1290 108 1400 132 L 1560 132 L 1560 190 L -120 190 Z" />
+        </g>
+        <g class="cloud-band cloud-band--3" fill="rgb(253 216 232 / 0.035)">
+          <path d="M-60 186 Q 40 162 150 182 Q 250 158 360 180 Q 470 158 580 182 Q 690 162 810 184 Q 930 162 1050 186 Q 1170 166 1290 188 Q 1380 172 1520 192 L 1560 192 L 1560 240 L -60 240 Z" />
+        </g>
+      </svg>
+    </div>
+
+    <!-- 远山双层剪影：后层浅、前层深 -->
+    <div class="scene-mountains">
+      <svg viewBox="0 0 1440 300" preserveAspectRatio="none">
+        <path fill="rgb(64 28 50 / 0.85)"
+          d="M0 300 L0 210 L 120 148 L 230 196 L 360 108 L 470 168 L 610 96 L 730 162 L 860 112 L 990 170 L 1120 122 L 1250 176 L 1360 140 L 1440 178 L 1440 300 Z" />
+        <path fill="rgb(38 15 31 / 0.95)"
+          d="M0 300 L0 244 L 140 196 L 260 232 L 400 168 L 520 214 L 660 158 L 790 208 L 930 170 L 1070 216 L 1210 178 L 1340 220 L 1440 196 L 1440 300 Z" />
+      </svg>
+    </div>
+
+    <!-- 鸟居剪影：柱 + 贯（下横梁） + 島木笠（上横梁微拱） -->
+    <div class="scene-torii">
+      <svg viewBox="0 0 300 190">
+        <g fill="rgb(22 8 18 / 0.9)">
+          <path d="M12 44 Q 150 26 288 44 L 288 20 Q 150 2 12 20 Z" />
+          <rect x="30" y="52" width="240" height="14" rx="4" />
+          <rect x="58" y="66" width="26" height="124" rx="6" />
+          <rect x="216" y="66" width="26" height="124" rx="6" />
+          <rect x="52" y="182" width="38" height="8" rx="3" />
+          <rect x="210" y="182" width="38" height="8" rx="3" />
+        </g>
+      </svg>
+    </div>
+
+    <!-- 垂樱枝：枝干 + 小枝 + 花簇（左上角，随风摇曳） -->
+    <div class="scene-branch">
+      <svg viewBox="0 0 420 380">
+        <g stroke="rgb(40 16 34 / 0.95)" fill="none" stroke-linecap="round">
+          <path d="M-6 8 Q 70 26 118 74 Q 160 118 168 176" stroke-width="11" />
+          <path d="M96 58 Q 150 72 196 122" stroke-width="6" />
+          <path d="M132 96 Q 170 140 180 200 Q 186 246 172 288" stroke-width="5" />
+          <path d="M168 176 Q 214 190 252 232" stroke-width="4.5" />
+          <path d="M180 200 Q 214 236 224 284" stroke-width="3.5" />
+          <path d="M172 288 Q 162 318 138 340" stroke-width="3" />
+          <path d="M224 284 Q 226 314 210 338" stroke-width="2.5" />
+          <path d="M252 232 Q 282 250 296 282" stroke-width="2.5" />
+        </g>
+        <!-- 花簇：五瓣小花 / 花苞，随机散在枝端 -->
+        <g fill="rgb(248 176 200 / 0.85)">
+          <g transform="translate(196 122)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(186 168) scale(.82)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(176 246) scale(.9)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(228 286) scale(.72)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(258 236) scale(.68)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(298 284) scale(.6)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(138 340) scale(.62)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <g transform="translate(210 338) scale(.56)">
+            <circle cx="0" cy="-6" r="5.5" /><circle cx="5.7" cy="-1.9" r="5.5" />
+            <circle cx="3.5" cy="4.9" r="5.5" /><circle cx="-3.5" cy="4.9" r="5.5" />
+            <circle cx="-5.7" cy="-1.9" r="5.5" /><circle cx="0" cy="0" r="2.4" fill="rgb(212 167 106 / 0.9)" />
+          </g>
+          <!-- 花苞 -->
+          <g fill="rgb(240 144 176 / 0.8)">
+            <circle cx="168" cy="122" r="3.4" /><circle cx="206" cy="146" r="3" />
+            <circle cx="192" cy="232" r="3.2" /><circle cx="176" cy="300" r="2.8" />
+            <circle cx="238" cy="252" r="2.8" /><circle cx="286" cy="262" r="2.6" />
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="scene-waves"></div>
+    <div class="scene-moon"></div>
+    <div class="scene-glow scene-glow--left"></div>
+    <div class="scene-glow scene-glow--right"></div>
+    <div class="scene-grain"></div>
+    <div class="scene-vignette"></div>
+
+    <!-- 粒子容器（JS 注入樱瓣与金尘） -->
+    <div id="petals"></div>
+    <div id="motes"></div>
+  </div>
+
+  <!-- ===== 品牌标头 ===== -->
+  <header class="brand fade-up">
+    <div class="brand-row">
+      <span class="brand-orn" aria-hidden="true">
+        <!-- 花菱饰件：四瓣花菱 + 内芯（画线入场） -->
+        <svg viewBox="0 0 44 44">
+          <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path class="draw-in" d="M22 4 L 34 16 L 22 28 L 10 16 Z" />
+            <path class="draw-in" d="M22 16 L 34 28 L 22 40 L 10 28 Z" opacity="0.55" />
+            <circle cx="22" cy="16" r="3.2" fill="currentColor" stroke="none" opacity="0.8" />
+          </g>
+        </svg>
+      </span>
+
+      <h1 class="brand-title">aryuu.icu</h1>
+
+      <span class="brand-orn brand-orn--right" aria-hidden="true">
+        <svg viewBox="0 0 44 44">
+          <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path class="draw-in" d="M22 40 L 10 28 L 22 16 L 34 28 Z" />
+            <path class="draw-in" d="M22 28 L 10 16 L 22 4 L 34 16 Z" opacity="0.55" />
+            <circle cx="22" cy="28" r="3.2" fill="currentColor" stroke="none" opacity="0.8" />
+          </g>
+        </svg>
+      </span>
+    </div>
+
+    <div class="brand-rule" aria-hidden="true">
+      <span class="rule-line"></span>
+      <span class="rule-node"></span>
+      <span class="rule-line rule-line--right"></span>
+    </div>
+  </header>
+
+  <!-- ===== 入口卡（整卡即入口） ===== -->
+  <main class="cards">
+    <!-- karuta：根路径已被门户占用，入口落 /login（karuta 零改动下的最佳落点） -->
+    <a class="card fade-up" href="/login" style="animation-delay: .18s">
+      <span class="sheen" aria-hidden="true"></span>
+      <span class="corner corner--tl" aria-hidden="true"></span>
+      <span class="corner corner--br" aria-hidden="true"></span>
+      <span class="card-watermark" aria-hidden="true">歌</span>
+
+      <span class="icon" aria-hidden="true">
+        <!-- 歌牌：叠置牌张 + 牌面歌句细线 -->
+        <svg viewBox="0 0 24 24">
+          <rect x="8" y="3" width="13" height="17" rx="2.5" />
+          <path d="M5 7.5v12A2.5 2.5 0 0 0 7.5 22H16" />
+          <path d="M12.5 8.5h4M12.5 12h4M12.5 15.5h2.5" />
+        </svg>
+      </span>
+      <h2>百人一首 Karuta</h2>
+      <p>实时对战的歌牌竞技</p>
+      <span class="chevron" aria-hidden="true">›</span>
+    </a>
+
+    <!-- anitexas：同域子路径（前端子路径化构建后） -->
+    <a class="card fade-up" href="/anitexas/" style="animation-delay: .32s">
+      <span class="sheen" aria-hidden="true"></span>
+      <span class="corner corner--tl" aria-hidden="true"></span>
+      <span class="corner corner--br" aria-hidden="true"></span>
+      <span class="card-watermark" aria-hidden="true">♠</span>
+
+      <span class="icon" aria-hidden="true">
+        <!-- 黑桃：德州牌桌花色 -->
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2.5C8 7.5 4 9.8 4 13.6a3.9 3.9 0 0 0 6.7 2.7c.1 2.2-.9 3.7-2.3 4.7h7.2c-1.4-1-2.4-2.5-2.3-4.7A3.9 3.9 0 0 0 20 13.6C20 9.8 16 7.5 12 2.5z" />
+        </svg>
+      </span>
+      <h2>AniTexas 动漫德州</h2>
+      <p>动漫知识 × 德州扑克</p>
+      <span class="chevron" aria-hidden="true">›</span>
+    </a>
+  </main>
+
+  <script>
+    /* ============================================================
+       樱瓣工厂：注入随机位置 / 尺寸 / 时延 / 节奏的飘落花瓣
+       ============================================================ */
+    (function () {
+      var layer = document.getElementById('petals');
+      if (!layer) return;
+      var COUNT = 16;
+      var FALLS = ['petal--fall-a', 'petal--fall-b', 'petal--fall-c'];
+      var SVG = '<svg viewBox="-8 -7 16 14">'
+        + '<path d="M0 -5.6 C 3.4 -5.6 5.8 -2.2 4.6 1 C 3.6 3.6 1.4 5.2 0 5.6 '
+        + 'C -1.4 5.2 -3.6 3.6 -4.6 1 C -5.8 -2.2 -3.4 -5.6 0 -5.6 Z" '
+        + 'fill="rgb(248 176 200 / 0.75)" stroke="rgb(253 216 232 / 0.45)" stroke-width="0.7"/></svg>';
+      for (var i = 0; i < COUNT; i++) {
+        var el = document.createElement('div');
+        el.className = 'petal ' + FALLS[i % FALLS.length];
+        el.style.left = (Math.random() * 100).toFixed(2) + 'vw';
+        el.style.animationDelay = (-Math.random() * 24).toFixed(2) + 's';
+        var s = (0.7 + Math.random() * 0.8).toFixed(2);
+        el.style.transform = 'scale(' + s + ')';
+        el.innerHTML = SVG;
+        layer.appendChild(el);
+      }
+    })();
+
+    /* ============================================================
+       金尘工厂：自下而上缓升微摆的金粉微粒
+       ============================================================ */
+    (function () {
+      var layer = document.getElementById('motes');
+      if (!layer) return;
+      var COUNT = 22;
+      for (var i = 0; i < COUNT; i++) {
+        var el = document.createElement('div');
+        el.className = 'mote';
+        el.style.left = (Math.random() * 100).toFixed(2) + 'vw';
+        el.style.setProperty('--mote-sway', ((Math.random() - 0.5) * 90).toFixed(1) + 'px');
+        el.style.animation =
+          'moteRise ' + (10 + Math.random() * 14).toFixed(1) + 's linear '
+          + (-Math.random() * 24).toFixed(2) + 's infinite';
+        var s = (0.5 + Math.random() * 1.1).toFixed(2);
+        el.style.width = el.style.height = (2 + 3 * s).toFixed(1) + 'px';
+        layer.appendChild(el);
+      }
+    })();
+
+    /* ============================================================
+       卡片交互：指针 3D 倾斜（离开归零） + 点击涟漪
+       ============================================================ */
+    (function () {
+      var cards = document.querySelectorAll('a.card');
+      cards.forEach(function (card) {
+        card.addEventListener('pointermove', function (e) {
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          var r = card.getBoundingClientRect();
+          var px = (e.clientX - r.left) / r.width - 0.5;
+          var py = (e.clientY - r.top) / r.height - 0.5;
+          card.style.setProperty('--tilt-x', (-py * 7).toFixed(2) + 'deg');
+          card.style.setProperty('--tilt-y', (px * 8).toFixed(2) + 'deg');
+        });
+        card.addEventListener('pointerleave', function () {
+          card.style.setProperty('--tilt-x', '0deg');
+          card.style.setProperty('--tilt-y', '0deg');
+        });
+        card.addEventListener('click', function (e) {
+          var r = card.getBoundingClientRect();
+          var span = document.createElement('span');
+          span.className = 'ripple';
+          var size = Math.max(r.width, r.height) * 1.7;
+          span.style.width = span.style.height = size + 'px';
+          span.style.left = (e.clientX - r.left) + 'px';
+          span.style.top = (e.clientY - r.top) + 'px';
+          card.appendChild(span);
+          setTimeout(function () { span.remove(); }, 560);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
